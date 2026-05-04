@@ -1,0 +1,245 @@
+{
+  "name": "Harmony Sauna - LINE OA Backend",
+  "description": "Backend workflow for Harmony Sauna LINE OA. Handles booking requests, staff approval notifications, coupon generation, and 24h reminders.",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sauna-line-webhook",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "node-line-webhook",
+      "name": "LINE OA Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Receives all LINE OA events. Set this URL as Webhook URL in LINE Developers Console."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Route LINE events to appropriate handlers\nconst body = $input.first().json;\nconst events = body.events || [];\n\nif (events.length === 0) {\n  return [{ json: { skip: true } }];\n}\n\nconst event = events[0];\nconst eventType = event.type;\nconst lineUserId = event.source?.userId || '';\n\nlet action = 'unknown';\nlet payload = {};\n\nif (eventType === 'postback') {\n  const data = event.postback?.data || '';\n  if (data.startsWith('action=')) action = data.replace('action=', '');\n  else if (data.startsWith('package=')) {\n    action = 'package_selected';\n    payload.packageKey = data.replace('package=', '');\n  }\n} else if (eventType === 'message' && event.message?.type === 'text') {\n  action = 'text_message';\n  payload.text = event.message.text;\n  payload.messageId = event.message.id;\n} else if (eventType === 'follow') {\n  action = 'new_follower';\n}\n\nconst packages = {\n  basic: { name: 'Basic Relax', price: 499, duration: 45 },\n  premium: { name: 'Premium', price: 899, duration: 90 },\n  couple: { name: 'Couple Spa', price: 1499, duration: 90 },\n  monthly: { name: 'Monthly Pass', price: 2499, duration: null }\n};\n\nconst packageInfo = payload.packageKey ? packages[payload.packageKey] : null;\n\nreturn [{\n  json: {\n    action,\n    lineUserId,\n    replyToken: event.replyToken || '',\n    payload,\n    packageInfo,\n    rawEvent: event\n  }\n}];\n"
+      },
+      "id": "node-route-event",
+      "name": "Route LINE Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sauna-booking-request",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "node-booking-request",
+      "name": "Webhook - Booking Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 600],
+      "notes": "Receives booking request: { lineUserId, customerName, packageKey, requestedDate, requestedTime }"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process booking request and prepare for staff approval\nconst d = $input.first().json.body || $input.first().json;\n\nconst packages = {\n  basic: { name: 'Basic Relax', price: 499, duration: 45 },\n  premium: { name: 'Premium', price: 899, duration: 90 },\n  couple: { name: 'Couple Spa', price: 1499, duration: 90 },\n  monthly: { name: 'Monthly Pass', price: 2499, duration: null }\n};\n\nconst pkg = packages[d.packageKey] || packages.basic;\nconst now = new Date();\nconst bookingId = `SPA-${now.toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(1000 + Math.random() * 9000)}`;\n\nreturn [{\n  json: {\n    bookingId,\n    lineUserId: d.lineUserId,\n    customerName: d.customerName || 'ลูกค้า',\n    packageKey: d.packageKey,\n    packageName: pkg.name,\n    packagePrice: pkg.price,\n    packageDuration: pkg.duration,\n    requestedDate: d.requestedDate,\n    requestedTime: d.requestedTime,\n    createdAt: now.toISOString(),\n    approvalStatus: 'Pending'\n  }\n}];\n"
+      },
+      "id": "node-process-booking",
+      "name": "Process Booking Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 600]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Booking ID": "={{ $json.bookingId }}",
+            "Date Created": "={{ $json.createdAt }}",
+            "Customer LINE ID": "={{ $json.lineUserId }}",
+            "Customer Name": "={{ $json.customerName }}",
+            "Package": "={{ $json.packageName }}",
+            "Package Price (THB)": "={{ $json.packagePrice }}",
+            "Booking Date": "={{ $json.requestedDate }}",
+            "Booking Time": "={{ $json.requestedTime }}",
+            "Duration (min)": "={{ $json.packageDuration }}",
+            "Staff Approval Status": "Pending"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-log-booking",
+      "name": "Log Booking to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 600],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "YOUR_CREDENTIAL_ID", "name": "Google Sheets" }
+      }
+    },
+    {
+      "parameters": {
+        "token": "YOUR_LINE_NOTIFY_TOKEN",
+        "message": "=🧖 [SAUNA BOOKING - APPROVAL REQUIRED]\n\n📋 Booking ID: {{ $json.bookingId }}\n👤 ลูกค้า: {{ $json.customerName }}\n💆 Package: {{ $json.packageName }} ({{ $json.packagePrice }} ฿)\n📅 วันที่ต้องการ: {{ $json.requestedDate }}\n⏰ เวลา: {{ $json.requestedTime }} น.\n\n━━━━━━━━━━━━━━\n⚠️ กรุณายืนยัน Slot ว่าง\n👉 อนุมัติ: [APPROVAL_LINK]/approve?id={{ $json.bookingId }}\n👉 ปฏิเสธ: [APPROVAL_LINK]/reject?id={{ $json.bookingId }}"
+      },
+      "id": "node-staff-notify",
+      "name": "Notify Staff for Approval",
+      "type": "n8n-nodes-base.lineNotify",
+      "typeVersion": 1,
+      "position": [900, 600],
+      "credentials": {
+        "lineNotifyOAuth2Api": { "id": "YOUR_LINE_NOTIFY_CREDENTIAL_ID", "name": "LINE Notify" }
+      },
+      "notes": "HUMAN APPROVAL GATE — Staff must confirm booking slot before coupon is issued."
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sauna-booking-approved",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "node-approval-webhook",
+      "name": "Webhook - Booking Approved",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 900],
+      "notes": "Called after staff approves booking. POST body: { bookingId, approvedBy, lineUserId, packageName, packagePrice, bookingDate, bookingTime }"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate unique coupon code\nfunction generateCoupon() {\n  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';\n  const nums = '0123456789';\n  let code = 'SAUNA-';\n  for (let i = 0; i < 3; i++) code += chars[Math.floor(Math.random() * chars.length)];\n  for (let i = 0; i < 3; i++) code += nums[Math.floor(Math.random() * nums.length)];\n  return code;\n}\n\nconst d = $input.first().json.body || $input.first().json;\nconst couponCode = generateCoupon();\nconst now = new Date();\nconst expiryDate = new Date(d.bookingDate || now);\nexpiryDate.setDate(expiryDate.getDate() + 1);\n\nreturn [{\n  json: {\n    ...d,\n    couponCode,\n    approvalTime: now.toISOString(),\n    expiryDate: expiryDate.toISOString().slice(0, 10)\n  }\n}];\n"
+      },
+      "id": "node-generate-coupon",
+      "name": "Generate Coupon Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 900]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
+        "filtersUI": { "values": [{ "lookupColumn": "Booking ID", "lookupValue": "={{ $json.bookingId }}" }] },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Staff Approval Status": "Approved",
+            "Approved By": "={{ $json.approvedBy }}",
+            "Approval Time": "={{ $json.approvalTime }}",
+            "Coupon Code": "={{ $json.couponCode }}",
+            "Coupon Status": "Unused"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-update-booking",
+      "name": "Update Booking - Approved",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 900],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "YOUR_CREDENTIAL_ID", "name": "Google Sheets" }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "message",
+        "operation": "send",
+        "to": "={{ $json.lineUserId }}",
+        "type": "text",
+        "text": "=✅ ยืนยันการจองแล้ว!\n\n💆 {{ $json.packageName }}\n📅 {{ $json.bookingDate }} เวลา {{ $json.bookingTime }} น.\n💰 {{ $json.packagePrice }} ฿\n\n🎟️ Coupon Code ของคุณ:\n{{ $json.couponCode }}\n\nกรุณาแสดง code นี้เมื่อมาถึง ✨\n\nพบกันวันนั้นนะครับ 🙏\n📍 [ที่อยู่ร้าน]"
+      },
+      "id": "node-send-confirmation",
+      "name": "Send Confirmation to Customer",
+      "type": "n8n-nodes-base.line",
+      "typeVersion": 1,
+      "position": [900, 900],
+      "credentials": {
+        "lineOAuth2Api": { "id": "YOUR_LINE_CHANNEL_CREDENTIAL_ID", "name": "LINE Messaging API" }
+      }
+    },
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+      },
+      "id": "node-reminder-trigger",
+      "name": "Hourly Reminder Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 1200],
+      "notes": "Runs every hour to check for bookings needing 24h reminder."
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Bookings", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-get-bookings",
+      "name": "Get All Bookings",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [460, 1200],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "YOUR_CREDENTIAL_ID", "name": "Google Sheets" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Find bookings where reminder should be sent (24h before booking)\nconst now = new Date();\nconst in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);\nconst in25h = new Date(now.getTime() + 25 * 60 * 60 * 1000);\n\nconst bookings = $input.all().map(r => r.json);\n\nconst reminders = bookings.filter(row => {\n  if ((row['Reminder Sent'] || '').toString() === 'Yes') return false;\n  if ((row['Staff Approval Status'] || '') !== 'Approved') return false;\n  \n  const bookingDateStr = row['Booking Date'];\n  const bookingTimeStr = row['Booking Time'] || '10:00';\n  if (!bookingDateStr) return false;\n  \n  const bookingDateTime = new Date(`${bookingDateStr}T${bookingTimeStr}:00`);\n  return bookingDateTime >= in24h && bookingDateTime <= in25h;\n});\n\nreturn reminders.map(r => ({ json: r }));\n"
+      },
+      "id": "node-filter-reminders",
+      "name": "Filter 24h Reminders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 1200]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "message",
+        "operation": "send",
+        "to": "={{ $json['Customer LINE ID'] }}",
+        "type": "text",
+        "text": "=⏰ แจ้งเตือน: พรุ่งนี้มีนัดกับ Harmony Sauna!\n\n🧖 {{ $json['Package'] }}\n📅 {{ $json['Booking Date'] }} เวลา {{ $json['Booking Time'] }} น.\n🎟️ Coupon: {{ $json['Coupon Code'] }}\n\nหากต้องการเลื่อนนัด กรุณาแจ้งล่วงหน้า 3 ชั่วโมง\nโทร: [เบอร์โทร] 🙏\n\nรอต้อนรับครับ! 🌿"
+      },
+      "id": "node-send-reminder",
+      "name": "Send 24h Reminder",
+      "type": "n8n-nodes-base.line",
+      "typeVersion": 1,
+      "position": [900, 1200],
+      "credentials": {
+        "lineOAuth2Api": { "id": "YOUR_LINE_CHANNEL_CREDENTIAL_ID", "name": "LINE Messaging API" }
+      }
+    }
+  ],
+  "connections": {
+    "LINE OA Webhook": { "main": [[{ "node": "Route LINE Event", "type": "main", "index": 0 }]] },
+    "Webhook - Booking Request": { "main": [[{ "node": "Process Booking Request", "type": "main", "index": 0 }]] },
+    "Process Booking Request": { "main": [[{ "node": "Log Booking to Sheets", "type": "main", "index": 0 }]] },
+    "Log Booking to Sheets": { "main": [[{ "node": "Notify Staff for Approval", "type": "main", "index": 0 }]] },
+    "Webhook - Booking Approved": { "main": [[{ "node": "Generate Coupon Code", "type": "main", "index": 0 }]] },
+    "Generate Coupon Code": { "main": [[{ "node": "Update Booking - Approved", "type": "main", "index": 0 }]] },
+    "Update Booking - Approved": { "main": [[{ "node": "Send Confirmation to Customer", "type": "main", "index": 0 }]] },
+    "Hourly Reminder Check": { "main": [[{ "node": "Get All Bookings", "type": "main", "index": 0 }]] },
+    "Get All Bookings": { "main": [[{ "node": "Filter 24h Reminders", "type": "main", "index": 0 }]] },
+    "Filter 24h Reminders": { "main": [[{ "node": "Send 24h Reminder", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "setupInstructions": [
+      "1. Replace YOUR_GOOGLE_SHEET_ID with your Google Sheets ID",
+      "2. Replace YOUR_LINE_NOTIFY_TOKEN with your LINE Notify token",
+      "3. Configure Google Sheets credentials",
+      "4. Configure LINE Messaging API credentials (Channel Access Token)",
+      "5. Set LINE OA Webhook URL to the 'LINE OA Webhook' node URL",
+      "6. Update shop address and phone number in message templates",
+      "7. Activate all workflows"
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+Quote ID,Date Received,Customer Name,Contact (LINE/Email),Origin,Destination,Shipment Type,Weight (kg),L (cm),W (cm),H (cm),CBM,Chargeable Weight,Base Rate,Surcharge,Total Quoted Price (THB),Currency,Approval Status,Approved By,Approval Date,Sent Date,Customer Response,Booking Status,Follow-up Date,Revenue (THB),Notes
+QT-2024-0001,2024-01-15,ตัวอย่าง บริษัท ABC,line_id_xxx,Bangkok TH,Shanghai CN,Sea LCL,500,120,80,100,0.96,1.00,65,0,4225,THB,Pending,,,,,,2024-01-18,,ตัวอย่างข้อมูล
+QT-2024-0002,2024-01-15,Sample Co Ltd,sample@email.com,Bangkok TH,Los Angeles US,Air,50,60,40,30,0.072,50,320,0,16000,THB,Approved,Manager,2024-01-15,2024-01-15,Accepted,Booking Confirmed,,16000,Rush shipment
