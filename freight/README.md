@@ -1,5 +1,9 @@
 # 🥇 Freight Forwarding Quotation Automation
 
+> ⚠️ **PILOT V1 — Draft-Only Supervised Mode**
+> ทุก quotation ต้องผ่าน Human Approval ก่อนส่งให้ลูกค้าเสมอ
+> ห้ามใช้ rate จาก rate-table.csv โดยไม่ verify กับ carrier จริงก่อน
+
 ระบบ #1 ที่ควรทำก่อน — ROI สูงสุด สามารถ implement ได้ใน 10-14 วัน
 
 ## ภาพรวม
@@ -15,10 +19,14 @@
 
 | ไฟล์ | วัตถุประสงค์ |
 |------|------------|
-| `n8n-workflow.json` | Import เข้า n8n ได้ทันที |
-| `rate-table.csv` | ตัวอย่าง Rate Table — copy เข้า Google Sheets |
+| `n8n-workflow.json` | Import เข้า n8n ได้ทันที (Pilot V1 — draft-only mode) |
+| `rate-table.csv` | Rate Table — **ต้อง verify กับ carrier จริงก่อนใช้** |
 | `quote-log-template.csv` | โครงสร้าง Quote Log Sheet |
-| `quotation-template.md` | Template เนื้อหาใบเสนอราคา |
+| `quotation-template.md` | Template ใบเสนอราคา (มี DRAFT watermark) |
+| `config-template.csv` | Environment variable reference — ตั้งใน n8n |
+| `error-log-template.csv` | โครงสร้าง Error Log สำหรับ pilot |
+| `test-cases.md` | Test cases ก่อน Go-Live |
+| `pilot-report-v1.md` | รายงาน Pilot Fix V1 |
 
 ## วิธี Setup (Step by Step)
 
@@ -47,12 +55,20 @@
 ### Step 3: n8n Setup
 1. ไปที่ n8n instance ของคุณ
 2. Import `n8n-workflow.json` (Menu → Import from file)
-3. กำหนด Credentials:
+3. ตั้ง **Environment Variables** ใน n8n (Settings → Variables):
+   - `GOOGLE_SHEET_ID` — ID ของ Google Sheet
+   - `USD_THB` — อัตราแลกเปลี่ยนปัจจุบัน เช่น `35.50` (อัปเดตทุกวัน)
+   - `QUOTE_VALIDITY_DAYS` — เช่น `30`
+   - `SALES_EMAIL` — อีเมลผู้ส่ง
+   - `MANAGER_EMAIL` — อีเมลผู้อนุมัติ
+   - `LINE_NOTIFY_TOKEN` — Token จาก notify-bot.line.me/my
+4. กำหนด Credentials:
    - **Google Sheets**: เพิ่ม Service Account credentials
-   - **LINE Notify**: ใส่ LINE Notify Token
+   - **LINE Notify**: ใส่ LINE Notify credentials
    - **Gmail/SMTP**: ใส่ Email credentials
-4. อัปเดต Webhook URL ของ Google Form ใน workflow
-5. Activate workflow
+5. อัปเดต Webhook URL ของ Google Form ใน workflow
+6. **ใส่ authentication บน approval webhook** ก่อน activate
+7. Activate workflow
 
 ### Step 4: ทดสอบ
 1. กรอก Google Form ด้วยข้อมูลทดสอบ

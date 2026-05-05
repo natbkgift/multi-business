@@ -1,0 +1,10 @@
+Key,Value,Type,Required,Description,Example
+USD_THB,,number,YES,อัตราแลกเปลี่ยน USD ต่อ THB — ต้องอัปเดตทุกวัน ห้าม hardcode,35.50
+DEFAULT_MARGIN_PERCENT,,number,YES,เปอร์เซ็นต์กำไรขั้นต้นที่ใช้ในการตรวจสอบราคา (ไม่ได้ใช้ในการคำนวณอัตโนมัติ — เพื่อ reference เท่านั้น),15
+QUOTE_VALIDITY_DAYS,,number,YES,จำนวนวันที่ใบเสนอราคามีผล,30
+DOC_FEE,,number,YES,ค่าธรรมเนียมเอกสาร (THB) ที่เพิ่มในทุก quote,500
+COMPANY_NAME,,string,YES,ชื่อบริษัทที่แสดงในใบเสนอราคา,บริษัท ตัวอย่าง จำกัด
+SALES_EMAIL,,string,YES,อีเมลผู้ส่งใบเสนอราคา (Gmail ที่ configure ใน n8n),sales@yourcompany.com
+MANAGER_EMAIL,,string,YES,อีเมลผู้จัดการที่รับ notification เพื่ออนุมัติ,manager@yourcompany.com
+GOOGLE_SHEET_ID,,string,YES,ID ของ Google Sheet หลัก (ดูจาก URL: docs.google.com/spreadsheets/d/<ID>/),1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms
+LINE_NOTIFY_TOKEN,,string,YES,Token สำหรับ LINE Notify (รับได้ที่ notify-bot.line.me/my) — ตั้งผ่าน n8n Credentials,xxxxxxxxxxxxxxxxxxxx

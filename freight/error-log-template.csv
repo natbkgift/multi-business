@@ -1,0 +1,3 @@
+Error ID,Timestamp,Quote ID,Node Name,Error Type,Error Message,Input Data Snapshot,Action Taken,Resolved By,Resolution Date,Notes
+ERR-001,,,,,,,,,,ตัวอย่าง: USD_THB ไม่ได้ตั้งค่า
+ERR-002,,,,,,,,,,ตัวอย่าง: ไม่พบ rate สำหรับเส้นทางนี้
