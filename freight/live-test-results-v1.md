@@ -600,6 +600,124 @@ Notes: ___________
 
 ---
 
+## 12. Operator Summary (สรุปโดย Technical Operator)
+
+> **วันที่รายงาน:** 2026-05-05T04:57:28Z
+> **ผู้รายงาน:** Freight Pilot Technical Operator (Copilot Coding Agent)
+> **สภาพแวดล้อม:** GitHub Actions Sandboxed Runner — ไม่มีการเชื่อมต่อ external services
+
+---
+
+### 12.1 รายงานการเข้าถึงสภาพแวดล้อม (Rule 9 Compliance Report)
+
+ตามกฎ **Strict Rule 9**: "If any environment access is unavailable, stop and report exactly what is missing."
+
+สภาพแวดล้อมการทำงานปัจจุบัน (Copilot coding agent sandbox) **ไม่มีการเข้าถึง** สิ่งต่อไปนี้:
+
+| สิ่งที่ต้องการ | สถานะ | หมายเหตุ |
+|--------------|-------|---------|
+| n8n TEST instance | ❌ ไม่มี | ไม่มี n8n ติดตั้งหรือเชื่อมต่อในสภาพแวดล้อมนี้ |
+| n8n Webhook URL (Freight Quote) | ❌ ไม่มี | ต้องได้จาก n8n instance ที่ active |
+| n8n Webhook URL (Approval) | ❌ ไม่มี | ต้องได้จาก n8n instance ที่ active |
+| Google Sheets API credential | ❌ ไม่มี | ไม่มี service account หรือ OAuth token |
+| Email/SMTP credential | ❌ ไม่มี | ไม่มีการกำหนดค่า SMTP ใดๆ |
+| LINE Notify token (หรือช่องทางแทน) | ❌ ไม่มี | ไม่มี token ทดสอบ |
+| APPROVAL_SECRET_TOKEN | ❌ ไม่มี | ต้องตั้งค่าใน n8n environment เท่านั้น |
+| HTTP endpoint สำหรับส่ง webhook payload | ❌ ไม่มี | sandbox ไม่อนุญาต outbound HTTP ไปยัง n8n |
+
+**ผลลัพธ์ตาม Rule 9:** หยุดการรัน live test และรายงาน access ที่ขาดทั้งหมด — คงสถานะทุก TC เป็น **NOT RUN** ตาม Rule 10
+
+---
+
+### 12.2 สรุปสถานะการตั้งค่า (Setup Status Dashboard)
+
+| รายการ | สถานะ | หมายเหตุ |
+|--------|-------|---------|
+| **Environment Setup** | 🔴 NOT DONE | ไม่มี n8n instance ที่เข้าถึงได้ |
+| **Google Sheets Setup** | 🔴 NOT DONE | ไม่มี Google API credential |
+| **Workflow Import** | 🔴 NOT DONE | ต้องการ n8n instance ก่อน |
+| **Credential Connection** | 🔴 NOT DONE | ไม่มี credential ใดๆ พร้อม |
+
+---
+
+### 12.3 สรุปผลการทดสอบ (Test Execution Summary)
+
+| รายการ | จำนวน | สถานะ |
+|--------|-------|-------|
+| **PASS** | 0 / 12 | ❌ ไม่มี Execution ID จริง |
+| **FAIL** | 0 / 12 | — |
+| **NOT RUN** | 12 / 12 | 🔵 ทุก TC — ไม่มี n8n access |
+| รวม TC ที่ต้องรัน | 12 | TC-001 ถึง TC-010b |
+
+**หมายเหตุ:** ตาม Strict Rule 8 — "Every PASS must include a real n8n Execution ID" — ไม่มี TC ใดสามารถ mark เป็น PASS ได้ในสภาพแวดล้อมนี้
+
+---
+
+### 12.4 ช่องว่าง Evidence ทั้งหมด (Evidence Gaps)
+
+| # | ช่องว่าง | ผลกระทบ |
+|---|---------|---------|
+| EG-01 | ไม่มี n8n Execution ID แม้แต่ ID เดียว | ไม่มี audit trail — ไม่สามารถ verify ผล workflow ได้ |
+| EG-02 | ไม่มี QuoteLog entries จาก live run | ไม่ทราบว่า Google Sheets integration ทำงาน |
+| EG-03 | ไม่มี notification evidence | ไม่ทราบว่า manager ได้รับแจ้ง |
+| EG-04 | ไม่มี ErrorLog entries จาก error cases | ไม่ทราบว่า error handling ทำงานจริง |
+| EG-05 | Rate Verified = NO ทุก route | ไม่สามารถ test happy path จริงได้ |
+| EG-06 | ไม่มี approval webhook evidence | ไม่ทราบว่า security check ทำงานใน n8n จริง |
+| EG-07 | ไม่มี n8n instance identifier | ไม่สามารถระบุ test environment ที่ใช้ |
+| EG-08 | ไม่มี Google Sheet ID สำหรับ test | ไม่มีฐานข้อมูล test ที่สร้างแล้ว |
+
+---
+
+### 12.5 Internal Pilot Go / No-Go
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║  INTERNAL PILOT GO/NO-GO:  🔴 NO-GO                         ║
+║  เหตุผล: 0/12 TC มี n8n Execution ID จริง                   ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+**เงื่อนไขสำหรับ Internal Pilot GO (ยังไม่ผ่าน):**
+- [ ] n8n test instance พร้อมใช้งาน
+- [ ] Environment variables ทั้ง 10 ตัวตั้งค่าแล้วและตรวจสอบแล้ว
+- [ ] Google Sheets test database สร้างและเชื่อมต่อแล้ว
+- [ ] Workflow import สำเร็จ (version 1.1.0-pilot)
+- [ ] TC-001 ถึง TC-010b ทุก case PASS พร้อม n8n Execution ID จริง
+- [ ] QuoteLog บันทึกครบทุก TC ที่ต้อง log
+- [ ] ErrorLog บันทึก error cases ครบ
+- [ ] Manager notification ส่งสำเร็จทุกกรณีที่ต้อง notify
+- [ ] ไม่มี customer auto-send เกิดขึ้นตลอดการทดสอบ
+
+---
+
+### 12.6 Production Go / No-Go
+
+```
+╔══════════════════════════════════════════════════════════════╗
+║  PRODUCTION GO/NO-GO:  🔴 NO-GO — ห้ามเด็ดขาด              ║
+║  Production จะ GO ได้เมื่อ Internal Pilot GO ก่อนเท่านั้น   ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+---
+
+### 12.7 Required Fixes Before Next Run (สิ่งที่ต้องแก้ไขก่อนรันครั้งต่อไป)
+
+| ลำดับ | รายการ | ประเภท | ผู้รับผิดชอบ |
+|-------|--------|--------|------------|
+| 1 | **ตั้งค่า n8n test instance** แยกจาก production | Blocker | Technical Operator |
+| 2 | **Import n8n-workflow.json** และ activate | Blocker | Technical Operator |
+| 3 | **ตั้งค่า environment variables** ทั้ง 10 ตัว (test values) | Blocker | Technical Operator |
+| 4 | **สร้าง Google Sheet test database** — 4 sheets: QuoteLog, RateTable, Config, ErrorLog | Blocker | Technical Operator |
+| 5 | **เชื่อมต่อ Google Sheets credential** ใน n8n test instance | Blocker | Technical Operator |
+| 6 | **กำหนด notification channel** (Email SMTP หรือ Slack สำหรับ test) | Blocker | Technical Operator |
+| 7 | **รัน TC-001 ถึง TC-010b** ตามแผนใน live-internal-test-plan-v1.md | Blocker | Technical Operator |
+| 8 | **กรอก Evidence Table** พร้อม n8n Execution ID จริงทุก TC | Blocker | Technical Operator |
+| 9 | **ติดต่อ carrier** เพื่อรับ rate sheet อย่างเป็นทางการ (Rate Verified) | Blocker (Production) | Freight Manager |
+| 10 | **ประชุม Go/No-Go** กับ manager หลังรัน TC ครบ | Process | Project Lead |
+
+---
+
 ## คำเตือนสุดท้าย
 
 > **🔴 ห้ามปฏิบัติต่อเอกสารนี้เป็น Go-Live evidence**
@@ -615,5 +733,6 @@ Notes: ___________
 ---
 
 *เอกสารนี้จัดทำโดย Freight Pilot Live Test Execution Coordinator*
-*เวอร์ชัน: 1.0.0 | วันที่: 2026-05-05 | สถานะ: INTERNAL TEST USE ONLY*
+*เวอร์ชัน: 1.0.1 | วันที่: 2026-05-05 | สถานะ: INTERNAL TEST USE ONLY*
 *อ้างอิง: freight/live-internal-test-plan-v1.md | freight/test-results-v1.md (simulation)*
+*Operator Summary เพิ่มโดย: Freight Pilot Technical Operator (Copilot Coding Agent) — 2026-05-05T04:57:28Z*
