@@ -1,5 +1,9 @@
 # 🥇 Freight Forwarding Quotation Automation
 
+> ⚠️ **PILOT V1 — Draft-Only Supervised Mode**
+> ทุก quotation ต้องผ่าน Human Approval ก่อนส่งให้ลูกค้าเสมอ
+> ห้ามใช้ rate จาก rate-table.csv โดยไม่ verify กับ carrier จริงก่อน
+
 ระบบ #1 ที่ควรทำก่อน — ROI สูงสุด สามารถ implement ได้ใน 10-14 วัน
 
 ## ภาพรวม
@@ -15,10 +19,16 @@
 
 | ไฟล์ | วัตถุประสงค์ |
 |------|------------|
-| `n8n-workflow.json` | Import เข้า n8n ได้ทันที |
-| `rate-table.csv` | ตัวอย่าง Rate Table — copy เข้า Google Sheets |
+| `n8n-workflow.json` | Import เข้า n8n ได้ทันที (Pilot V1 — draft-only mode) |
+| `rate-table.csv` | Rate Table — **ต้อง verify กับ carrier จริงก่อนใช้** |
 | `quote-log-template.csv` | โครงสร้าง Quote Log Sheet |
-| `quotation-template.md` | Template เนื้อหาใบเสนอราคา |
+| `quotation-template.md` | Template ใบเสนอราคา (มี DRAFT watermark) |
+| `config-template.csv` | Environment variable reference — ตั้งใน n8n |
+| `error-log-template.csv` | โครงสร้าง Error Log สำหรับ pilot |
+| `test-cases.md` | Test cases ก่อน Go-Live (TC-001–TC-011) |
+| `test-results-v1.md` | Simulation results สำหรับ TC-001–TC-011 |
+| `pilot-report-v1.md` | รายงาน Pilot Fix V1 |
+| `pilot-qa-audit-v1.md` | QA Audit report |
 
 ## วิธี Setup (Step by Step)
 
@@ -47,19 +57,49 @@
 ### Step 3: n8n Setup
 1. ไปที่ n8n instance ของคุณ
 2. Import `n8n-workflow.json` (Menu → Import from file)
-3. กำหนด Credentials:
+3. ตั้ง **Environment Variables** ใน n8n (Settings → Variables):
+   - `GOOGLE_SHEET_ID` — ID ของ Google Sheet
+   - `USD_THB` — อัตราแลกเปลี่ยนปัจจุบัน เช่น `35.50` (อัปเดตทุกวัน)
+   - `QUOTE_VALIDITY_DAYS` — เช่น `30`
+   - `DOC_FEE` — ค่าธรรมเนียมเอกสาร (THB) เช่น `500`
+   - `SALES_EMAIL` — อีเมลผู้ส่ง
+   - `MANAGER_EMAIL` — อีเมลผู้อนุมัติ
+   - `LINE_NOTIFY_TOKEN` — Token จาก notify-bot.line.me/my
+   - `APPROVAL_SECRET_TOKEN` — **[SECURITY REQUIRED]** Secret token สำหรับ approval webhook  
+     สร้างด้วย random string ≥ 32 ตัวอักษร ใช้ตัวอักษร alphanumeric และสัญลักษณ์ `-_` เท่านั้น  
+     (เช่น `openssl rand -hex 32` หรือ `openssl rand -base64 32 | tr -d '=+/'`)  
+     **ห้ามใช้อักขระพิเศษ เช่น `&`, `?`, `#` เพราะอาจมีปัญหา URL encoding**  
+     **ห้าม commit ค่าจริงลงใน git**  
+     ผู้ที่ trigger approval webhook ต้องส่ง token นี้ใน header `x-approval-token` หรือ body field `approvalToken`
+4. กำหนด Credentials:
    - **Google Sheets**: เพิ่ม Service Account credentials
-   - **LINE Notify**: ใส่ LINE Notify Token
+   - **LINE Notify**: ใส่ LINE Notify credentials
    - **Gmail/SMTP**: ใส่ Email credentials
-4. อัปเดต Webhook URL ของ Google Form ใน workflow
-5. Activate workflow
+5. อัปเดต Webhook URL ของ Google Form ใน workflow
+6. **ใส่ authentication บน approval webhook** ก่อน activate
+7. Activate workflow
 
-### Step 4: ทดสอบ
+### Step 4: ทดสอบ Approval Webhook
+
+ก่อนส่ง approval request ต้องใส่ token เสมอ:
+
+```bash
+# ตัวอย่าง curl พร้อม APPROVAL_SECRET_TOKEN
+curl -X POST https://your-n8n-instance/webhook/freight-quote-approved \
+  -H "Content-Type: application/json" \
+  -H "x-approval-token: <YOUR_APPROVAL_SECRET_TOKEN>" \
+  -d '{"quoteId":"QT-20260505-1234","approvedBy":"manager","customerContact":"@line_id","totalPrice":9500,"customerName":"Test Co."}'
+```
+
+หาก token ขาดหรือผิด → workflow จะ throw error และ **ลูกค้าจะไม่ได้รับข้อความใดๆ**
+
+### Step 5: ทดสอบ End-to-End
 1. กรอก Google Form ด้วยข้อมูลทดสอบ
 2. ตรวจดูว่า n8n ดึงข้อมูลได้ถูกต้อง
-3. ตรวจ Quote Log ว่าบันทึกข้อมูลครบ
-4. ตรวจ LINE Notify ว่าแจ้งเตือนมา
-5. อนุมัติ → ตรวจว่าระบบส่ง quote ให้ลูกค้า
+3. ตรวจ Quote Log ว่าบันทึกข้อมูลครบ (status = DRAFT)
+4. ตรวจ LINE Notify ว่าแจ้งเตือน manager มา
+5. ทดสอบ approval webhook พร้อม valid token — ตรวจว่าระบบส่ง quote ให้ลูกค้า
+6. ทดสอบ approval webhook **ไม่มี token** — ตรวจว่า workflow halt และลูกค้าไม่ได้รับ
 
 ## Manual Fallback (ถ้าระบบล้มเหลว)
 

@@ -1,14 +1,15 @@
 Last Updated,2024-01-01
-Route,Origin,Destination,Air Rate (THB/kg),Sea FCL 20ft (USD),Sea FCL 40ft (USD),Sea LCL (USD/CBM),Transit Air (days),Transit Sea (days),Min Charge (THB),Surcharge Notes
-TH-CN,Thailand,China,180,850,1200,65,3-5,18-25,500,"Fuel surcharge may apply"
-TH-US,Thailand,USA,320,1800,2800,120,5-7,25-35,800,"ISF filing required"
-TH-EU,Thailand,Europe (General),290,1600,2500,110,5-8,28-38,800,"EUR port varies"
-TH-AU,Thailand,Australia,260,1400,2200,95,4-6,22-30,700,""
-TH-JP,Thailand,Japan,200,950,1400,70,3-5,8-12,500,"Japan customs docs required"
-TH-KR,Thailand,South Korea,210,1000,1500,72,3-5,10-14,500,""
-TH-SG,Thailand,Singapore,150,600,900,50,2-3,3-5,400,""
-TH-MY,Thailand,Malaysia,130,550,800,45,2-3,3-5,350,"Road option available"
-TH-IN,Thailand,India,230,1200,1900,88,4-6,18-22,600,""
-TH-AE,Thailand,UAE / Dubai,250,1300,2000,95,5-7,18-25,650,"DHL Express alt available"
-CN-TH,China,Thailand,160,800,1150,60,3-5,18-25,500,""
-US-TH,USA,Thailand,350,1900,2900,125,5-7,25-35,900,""
+NOTE — PILOT V1: ห้ามใช้ตารางนี้เป็น live rate โดยไม่ได้ verify ราคาจาก carrier จริง ทุก rate ต้องได้รับการยืนยันก่อน pilot — Rate Verified ต้องเป็น YES เท่านั้น (โดยมนุษย์) จึงจะคำนวณราคาได้
+Route,Origin,Destination,Air Rate (THB/kg),Sea FCL 20ft (USD),Sea FCL 40ft (USD),Sea LCL (USD/CBM),Transit Air (days),Transit Sea (days),Min Charge (THB),Fuel Surcharge (USD/CBM),BAF (USD/CBM),Other Surcharge (USD),Rate Verified,Surcharge Notes,Verified By,Verified Date,Supplier / Carrier,Rate Valid Until,Verification Notes
+TH-CN,Thailand,China,180,850,1200,65,3-5,18-25,500,0,0,0,NO,"Fuel surcharge may apply — verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+TH-US,Thailand,USA,320,1800,2800,120,5-7,25-35,800,0,0,0,NO,"ISF filing required — verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+TH-EU,Thailand,Europe (General),290,1600,2500,110,5-8,28-38,800,0,0,0,NO,"EUR port varies — verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+TH-AU,Thailand,Australia,260,1400,2200,95,4-6,22-30,700,0,0,0,NO,"Verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+TH-JP,Thailand,Japan,200,950,1400,70,3-5,8-12,500,0,0,0,NO,"Japan customs docs required — verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+TH-KR,Thailand,South Korea,210,1000,1500,72,3-5,10-14,500,0,0,0,NO,"Verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+TH-SG,Thailand,Singapore,150,600,900,50,2-3,3-5,400,0,0,0,NO,"Verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+TH-MY,Thailand,Malaysia,130,550,800,45,2-3,3-5,350,0,0,0,NO,"Road option available — land rate requires manual quote",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+TH-IN,Thailand,India,230,1200,1900,88,4-6,18-22,600,0,0,0,NO,"Verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+TH-AE,Thailand,UAE / Dubai,250,1300,2000,95,5-7,18-25,650,0,0,0,NO,"DHL Express alt available — verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+CN-TH,China,Thailand,160,800,1150,60,3-5,18-25,500,0,0,0,NO,"Verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES
+US-TH,USA,Thailand,350,1900,2900,125,5-7,25-35,900,0,0,0,NO,"Verify before use",,,,,ยังไม่ได้ verify — ห้ามใช้จนกว่าจะเปลี่ยน Rate Verified เป็น YES

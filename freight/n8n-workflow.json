@@ -12,7 +12,10 @@
       "name": "Webhook - Quote Request",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "notes": "Receives data from Google Form or LINE OA. Configure Google Form to POST to this webhook URL via Apps Script, or connect via Make.com intermediary."
     },
     {
@@ -23,15 +26,18 @@
       "name": "Normalize & Calculate CBM",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300],
+      "position": [
+        460,
+        300
+      ],
       "notes": "Validates input, calculates CBM and chargeable weight, generates Quote ID."
     },
     {
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "YOUR_GOOGLE_SHEET_ID",
-          "mode": "id"
+          "value": "={{ $env.GOOGLE_SHEET_ID }}",
+          "mode": "expression"
         },
         "sheetName": {
           "__rl": true,
@@ -44,7 +50,10 @@
       "name": "Get Rate Table",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4,
-      "position": [680, 300],
+      "position": [
+        680,
+        300
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
@@ -55,21 +64,24 @@
     },
     {
       "parameters": {
-        "jsCode": "// Look up rate for the route and calculate total price\nconst quoteData = $('Normalize & Calculate CBM').first().json;\nconst rateRows = $('Get Rate Table').all().map(r => r.json);\n\nconst route = quoteData.routeKey;\nconst shipmentType = quoteData.shipmentType.toLowerCase();\n\n// Find matching rate row\nconst rateRow = rateRows.find(r => {\n  const rowRoute = (r['Route'] || '').toString().trim().toUpperCase();\n  return rowRoute === route;\n});\n\nif (!rateRow) {\n  return [{\n    json: {\n      ...quoteData,\n      error: `No rate found for route: ${route}`,\n      requiresManualQuote: true,\n      freightCharge: 0,\n      docFee: 500,\n      otherCharges: 0,\n      totalPrice: 0\n    }\n  }];\n}\n\n// Calculate freight charge based on shipment type\nlet freightCharge = 0;\nconst chargeableWeight = quoteData.chargeableWeight;\nconst cbm = quoteData.cbm;\n\nif (shipmentType.includes('air')) {\n  const airRate = parseFloat(rateRow['Air Rate (THB/kg)'] || 0);\n  freightCharge = chargeableWeight * airRate;\n} else if (shipmentType.includes('fcl') && shipmentType.includes('20')) {\n  freightCharge = parseFloat(rateRow['Sea FCL 20ft (USD)'] || 0) * 36; // approx THB conversion\n} else if (shipmentType.includes('fcl') && shipmentType.includes('40')) {\n  freightCharge = parseFloat(rateRow['Sea FCL 40ft (USD)'] || 0) * 36;\n} else if (shipmentType.includes('lcl')) {\n  const lclRate = parseFloat(rateRow['Sea LCL (USD/CBM)'] || 0);\n  freightCharge = Math.max(cbm, chargeableWeight) * lclRate * 36;\n} else if (shipmentType.includes('land')) {\n  freightCharge = chargeableWeight * 15; // Default land rate per kg\n}\n\nconst docFee = 500;\nconst minCharge = parseFloat(rateRow['Min Charge (THB)'] || 500);\nconst transitDays = shipmentType.includes('air')\n  ? rateRow['Transit Air (days)']\n  : rateRow['Transit Sea (days)'];\n\nfreightCharge = Math.max(freightCharge, minCharge);\nconst totalPrice = Math.ceil(freightCharge + docFee);\n\nconst validUntil = new Date();\nvalidUntil.setDate(validUntil.getDate() + 30);\n\nreturn [{\n  json: {\n    ...quoteData,\n    requiresManualQuote: false,\n    airRatePerKg: rateRow['Air Rate (THB/kg)'],\n    transitDays,\n    freightCharge: Math.ceil(freightCharge),\n    docFee,\n    otherCharges: 0,\n    totalPrice,\n    validUntil: validUntil.toISOString().slice(0, 10),\n    surchargeNotes: rateRow['Surcharge Notes'] || ''\n  }\n}];\n"
+        "jsCode": "// Look up rate for the route and calculate total price\nconst quoteData = $('Normalize & Calculate CBM').first().json;\nconst rateRows = $('Get Rate Table').all().map(r => r.json);\n\n// Read USD/THB exchange rate from environment variable (REQUIRED — do not hardcode)\nconst usdThb = parseFloat($env.USD_THB || '0');\nif (usdThb <= 0) {\n  return [{\n    json: {\n      ...quoteData,\n      error: 'USD_THB rate not configured. Set USD_THB environment variable.',\n      requiresManualQuote: true,\n      freightCharge: 0,\n      docFee: 0,\n      otherCharges: 0,\n      totalPrice: 0,\n      quoteStatus: 'DRAFT — Pending Internal Approval'\n    }\n  }];\n}\n\n// Read quote validity days from environment variable\nconst validityDays = parseInt($env.QUOTE_VALIDITY_DAYS || '30');\n\nconst route = quoteData.routeKey;\nconst shipmentType = quoteData.shipmentType.toLowerCase();\n\n// Find matching rate row\nconst rateRow = rateRows.find(r => {\n  const rowRoute = (r['Route'] || '').toString().trim().toUpperCase();\n  return rowRoute === route;\n});\n\nif (!rateRow) {\n  return [{\n    json: {\n      ...quoteData,\n      error: `No rate found for route: ${route}`,\n      requiresManualQuote: true,\n      freightCharge: 0,\n      docFee: 0,\n      otherCharges: 0,\n      totalPrice: 0,\n      quoteStatus: 'DRAFT — Pending Internal Approval'\n    }\n  }];\n}\n\n\n// Block unverified rates — Rate Verified must be YES before any calculation\n// Case-insensitive check: 'YES', 'yes', 'Yes' all accepted; anything else → blocked\nconst rateVerified = (rateRow['Rate Verified'] || '').toString().trim().toUpperCase();\nif (rateVerified !== 'YES') {\n  return [{\n    json: {\n      ...quoteData,\n      error: `Rate for route ${route} is not verified (Rate Verified = ${rateRow['Rate Verified'] || 'NO'}). Manual quote required.`,\n      requiresManualQuote: true,\n      logReason: 'RATE_NOT_VERIFIED',\n      freightCharge: 0,\n      docFee: 0,\n      otherCharges: 0,\n      totalPrice: 0,\n      quoteStatus: 'DRAFT — Pending Internal Approval'\n    }\n  }];\n}\n\n// Land shipments: no verified rate in table — always require manual quote\nif (shipmentType.includes('land')) {\n  return [{\n    json: {\n      ...quoteData,\n      error: 'Land shipment: no verified rate available. Requires manual quote.',\n      requiresManualQuote: true,\n      freightCharge: 0,\n      docFee: 0,\n      otherCharges: 0,\n      totalPrice: 0,\n      quoteStatus: 'DRAFT — Pending Internal Approval'\n    }\n  }];\n}\n\n// Calculate freight charge based on shipment type\nlet freightCharge = 0;\nconst chargeableWeight = quoteData.chargeableWeight;\nconst cbm = quoteData.cbm;\n\nif (shipmentType.includes('air')) {\n  const airRate = parseFloat(rateRow['Air Rate (THB/kg)'] || 0);\n  freightCharge = chargeableWeight * airRate;\n} else if (shipmentType.includes('fcl') && shipmentType.includes('20')) {\n  freightCharge = parseFloat(rateRow['Sea FCL 20ft (USD)'] || 0) * usdThb;\n} else if (shipmentType.includes('fcl') && shipmentType.includes('40')) {\n  freightCharge = parseFloat(rateRow['Sea FCL 40ft (USD)'] || 0) * usdThb;\n} else if (shipmentType.includes('lcl')) {\n  const lclRate = parseFloat(rateRow['Sea LCL (USD/CBM)'] || 0);\n  freightCharge = Math.max(cbm, chargeableWeight) * lclRate * usdThb;\n} else {\n  return [{\n    json: {\n      ...quoteData,\n      error: `Unknown shipment type: ${quoteData.shipmentType}. Requires manual quote.`,\n      requiresManualQuote: true,\n      freightCharge: 0,\n      docFee: 0,\n      otherCharges: 0,\n      totalPrice: 0,\n      quoteStatus: 'DRAFT — Pending Internal Approval'\n    }\n  }];\n}\n\n// Apply only numeric verified surcharges from rate table columns\nlet surchargeTotal = 0;\nconst fuelSurcharge = parseFloat(rateRow['Fuel Surcharge (USD/CBM)'] || '0');\nconst baf = parseFloat(rateRow['BAF (USD/CBM)'] || '0');\nconst otherSurcharge = parseFloat(rateRow['Other Surcharge (USD)'] || '0');\n\nif (fuelSurcharge > 0) surchargeTotal += fuelSurcharge * cbm * usdThb;\nif (baf > 0) surchargeTotal += baf * cbm * usdThb;\nif (otherSurcharge > 0) surchargeTotal += otherSurcharge * usdThb;\n\nconst docFee = parseFloat($env.DOC_FEE || '500');\nconst minCharge = parseFloat(rateRow['Min Charge (THB)'] || 500);\nconst transitDays = shipmentType.includes('air')\n  ? rateRow['Transit Air (days)']\n  : rateRow['Transit Sea (days)'];\n\nfreightCharge = Math.max(freightCharge, minCharge);\nconst totalPrice = Math.ceil(freightCharge + surchargeTotal + docFee);\n\nconst validUntil = new Date();\nvalidUntil.setDate(validUntil.getDate() + validityDays);\n\nreturn [{\n  json: {\n    ...quoteData,\n    requiresManualQuote: false,\n    airRatePerKg: rateRow['Air Rate (THB/kg)'],\n    transitDays,\n    freightCharge: Math.ceil(freightCharge),\n    docFee,\n    otherCharges: Math.ceil(surchargeTotal),\n    totalPrice,\n    validUntil: validUntil.toISOString().slice(0, 10),\n    surchargeNotes: rateRow['Surcharge Notes'] || '',\n    quoteStatus: 'DRAFT — Pending Internal Approval'\n  }\n}];\n"
       },
       "id": "node-calculate-price",
       "name": "Calculate Price",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300],
-      "notes": "Looks up rate from RateTable and calculates total quoted price."
+      "position": [
+        900,
+        300
+      ],
+      "notes": "Looks up rate from RateTable and calculates total quoted price. USD_THB is read from $env.USD_THB (required). Land shipments always set requiresManualQuote=true. Surcharges applied only from numeric verified columns."
     },
     {
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "YOUR_GOOGLE_SHEET_ID",
-          "mode": "id"
+          "value": "={{ $env.GOOGLE_SHEET_ID }}",
+          "mode": "expression"
         },
         "sheetName": {
           "__rl": true,
@@ -97,7 +109,8 @@
             "Total Quoted Price (THB)": "={{ $json.totalPrice }}",
             "Currency": "THB",
             "Approval Status": "Pending",
-            "Notes": "={{ $json.notes }}"
+            "Notes": "={{ $json.notes }}",
+            "Quote Status": "={{ $json.quoteStatus || \"DRAFT — Pending Internal Approval\" }}"
           }
         },
         "options": {}
@@ -106,36 +119,45 @@
       "name": "Log to Quote Sheet",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4,
-      "position": [1120, 300],
+      "position": [
+        1120,
+        300
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
           "name": "Google Sheets"
         }
       },
-      "notes": "Appends new row to QuoteLog sheet."
+      "notes": "Appends new DRAFT row to QuoteLog sheet. Quote Status is always DRAFT at this stage."
     },
     {
       "parameters": {
-        "jsCode": "// Build approval notification message\nconst d = $input.first().json;\nconst status = d.requiresManualQuote ? '⚠️ ต้องคำนวณราคาเอง' : '✅ คำนวณอัตโนมัติ';\n\nconst message = [\n  '🚢 [FREIGHT QUOTE REQUEST]',\n  `📋 Quote No: ${d.quoteId}`,\n  `👤 ลูกค้า: ${d.customerName}`,\n  `📞 ติดต่อ: ${d.contact}`,\n  `📦 เส้นทาง: ${d.origin} → ${d.destination}`,\n  `🚀 ประเภท: ${d.shipmentType}`,\n  `⚖️  น้ำหนัก: ${d.weightKg} kg | CBM: ${d.cbm}`,\n  `💰 ราคาที่แนะนำ: ${d.totalPrice?.toLocaleString() || 'N/A'} THB`,\n  `📅 Transit: ${d.transitDays || 'N/A'}`,\n  status,\n  '',\n  '━━━━━━━━━━━━━━━━━━',\n  '⚠️ กรุณาตรวจสอบและอนุมัติก่อนส่งให้ลูกค้า',\n  `👉 เปิด Google Sheets: https://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID`,\n  `หา Quote ID: ${d.quoteId} → เปลี่ยน Status เป็น Approved`\n].join('\\n');\n\nreturn [{ json: { ...d, notificationMessage: message } }];\n"
+        "jsCode": "// Build approval notification message\nconst d = $input.first().json;\nconst status = d.requiresManualQuote ? '⚠️ ต้องคำนวณราคาเอง' : '✅ คำนวณอัตโนมัติ';\n\nconst message = [\n  '🚢 [FREIGHT QUOTE REQUEST — DRAFT]',\n  `📋 Quote No: ${d.quoteId}`,\n  `👤 ลูกค้า: ${d.customerName}`,\n  `📞 ติดต่อ: ${d.contact}`,\n  `📦 เส้นทาง: ${d.origin} → ${d.destination}`,\n  `🚀 ประเภท: ${d.shipmentType}`,\n  `⚖️  น้ำหนัก: ${d.weightKg} kg | CBM: ${d.cbm}`,\n  `💰 ราคาที่แนะนำ: ${d.totalPrice?.toLocaleString() || 'N/A'} THB`,\n  `📅 Transit: ${d.transitDays || 'N/A'}`,\n  status,\n  '',\n  '━━━━━━━━━━━━━━━━━━',\n  '⚠️ กรุณาตรวจสอบและอนุมัติก่อนส่งให้ลูกค้า',\n  `👉 เปิด Google Sheets: https://docs.google.com/spreadsheets/d/${$env.GOOGLE_SHEET_ID || \"CONFIGURE_GOOGLE_SHEET_ID\"}`,\n  `หา Quote ID: ${d.quoteId} → เปลี่ยน Status เป็น Approved`\n].join('\\n');\n\nreturn [{ json: { ...d, notificationMessage: message } }];\n"
       },
       "id": "node-build-notification",
       "name": "Build Approval Notification",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 300],
+      "position": [
+        1340,
+        300
+      ],
       "notes": "Formats the LINE Notify / Email approval message."
     },
     {
       "parameters": {
-        "token": "YOUR_LINE_NOTIFY_TOKEN",
+        "token": "={{ $env.LINE_NOTIFY_TOKEN }}",
         "message": "={{ $json.notificationMessage }}"
       },
       "id": "node-line-notify",
       "name": "LINE Notify - Human Approval",
       "type": "n8n-nodes-base.lineNotify",
       "typeVersion": 1,
-      "position": [1560, 200],
+      "position": [
+        1560,
+        200
+      ],
       "credentials": {
         "lineNotifyOAuth2Api": {
           "id": "YOUR_LINE_NOTIFY_CREDENTIAL_ID",
@@ -146,8 +168,8 @@
     },
     {
       "parameters": {
-        "fromEmail": "your-email@gmail.com",
-        "toEmail": "manager@yourcompany.com",
+        "fromEmail": "={{ $env.SALES_EMAIL }}",
+        "toEmail": "={{ $env.MANAGER_EMAIL }}",
         "subject": "=[APPROVAL REQUIRED] Freight Quote {{ $json.quoteId }}",
         "emailType": "text",
         "message": "={{ $json.notificationMessage }}"
@@ -156,14 +178,17 @@
       "name": "Email - Human Approval Backup",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2,
-      "position": [1560, 420],
+      "position": [
+        1560,
+        420
+      ],
       "credentials": {
         "gmailOAuth2": {
           "id": "YOUR_GMAIL_CREDENTIAL_ID",
           "name": "Gmail"
         }
       },
-      "notes": "Backup email notification. Update fromEmail and toEmail."
+      "notes": "Backup email notification. Set SALES_EMAIL and MANAGER_EMAIL in n8n environment variables."
     },
     {
       "parameters": {
@@ -176,7 +201,10 @@
       "name": "Webhook - Quote Approved",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [240, 600],
+      "position": [
+        240,
+        600
+      ],
       "notes": "Triggered when a quote is approved. Can be called manually from Google Sheets Apps Script, or from a simple approval web form. POST body: { quoteId, approvedBy, customerContact, totalPrice, customerName }"
     },
     {
@@ -187,7 +215,10 @@
       "name": "Build Customer Quote Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 600],
+      "position": [
+        460,
+        600
+      ],
       "notes": "Formats the customer-facing quotation message after approval."
     },
     {
@@ -203,7 +234,10 @@
       "name": "Send Quote to Customer (LINE)",
       "type": "n8n-nodes-base.line",
       "typeVersion": 1,
-      "position": [680, 600],
+      "position": [
+        680,
+        600
+      ],
       "credentials": {
         "lineOAuth2Api": {
           "id": "YOUR_LINE_CHANNEL_CREDENTIAL_ID",
@@ -216,8 +250,8 @@
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "YOUR_GOOGLE_SHEET_ID",
-          "mode": "id"
+          "value": "={{ $env.GOOGLE_SHEET_ID }}",
+          "mode": "expression"
         },
         "sheetName": {
           "__rl": true,
@@ -248,7 +282,10 @@
       "name": "Update Sheet - Approved & Sent",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4,
-      "position": [900, 600],
+      "position": [
+        900,
+        600
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
@@ -272,15 +309,18 @@
       "name": "Daily Follow-up Trigger",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1,
-      "position": [240, 900],
+      "position": [
+        240,
+        900
+      ],
       "notes": "Runs every 24 hours to check for quotes that need follow-up."
     },
     {
       "parameters": {
         "documentId": {
           "__rl": true,
-          "value": "YOUR_GOOGLE_SHEET_ID",
-          "mode": "id"
+          "value": "={{ $env.GOOGLE_SHEET_ID }}",
+          "mode": "expression"
         },
         "sheetName": {
           "__rl": true,
@@ -293,7 +333,10 @@
       "name": "Get Pending Follow-ups",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4,
-      "position": [460, 900],
+      "position": [
+        460,
+        900
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
           "id": "YOUR_GOOGLE_SHEETS_CREDENTIAL_ID",
@@ -310,19 +353,25 @@
       "name": "Filter Due Follow-ups",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [680, 900],
+      "position": [
+        680,
+        900
+      ],
       "notes": "Filters quotes where today is the follow-up date and no response yet."
     },
     {
       "parameters": {
-        "token": "YOUR_LINE_NOTIFY_TOKEN",
+        "token": "={{ $env.LINE_NOTIFY_TOKEN }}",
         "message": "=📬 Follow-up ที่ต้องทำวันนี้:\nQuote {{ $json['Quote ID'] }} | {{ $json['Customer Name'] }}\nเส้นทาง: {{ $json['Origin'] }} → {{ $json['Destination'] }}\nราคา: {{ $json['Total Quoted Price (THB)'] }} THB\nติดต่อ: {{ $json['Contact (LINE/Email)'] }}"
       },
       "id": "node-followup-notify",
       "name": "Follow-up Reminder Notify",
       "type": "n8n-nodes-base.lineNotify",
       "typeVersion": 1,
-      "position": [900, 900],
+      "position": [
+        900,
+        900
+      ],
       "credentials": {
         "lineNotifyOAuth2Api": {
           "id": "YOUR_LINE_NOTIFY_CREDENTIAL_ID",
@@ -330,70 +379,169 @@
         }
       },
       "notes": "Sends daily follow-up reminders to the team via LINE Notify."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate APPROVAL_SECRET_TOKEN before allowing customer-facing quote to be sent\nconst body = $input.first().json.body || $input.first().json;\nconst headers = $input.first().json.headers || {};\n\n// Accept token from HTTP header 'x-approval-token' OR body field 'approvalToken'\nconst providedToken = (headers['x-approval-token'] || body.approvalToken || '').toString().trim();\nconst expectedToken = ($env.APPROVAL_SECRET_TOKEN || '').toString().trim();\n\nif (!expectedToken) {\n  throw new Error(\n    'APPROVAL_SECRET_TOKEN env var is not configured. '\n    + 'Cannot process approval requests. Configure the variable in n8n Settings → Variables.'\n  );\n}\n\nif (!providedToken || providedToken !== expectedToken) {\n  throw new Error(\n    '401 Unauthorized: Invalid or missing approval token. '\n    + 'Request rejected — customer quote NOT sent. '\n    + 'Provide the correct token in header \\'x-approval-token\\' or body field \\'approvalToken\\'.'\n  );\n}\n\n// Token valid — pass through to Build Customer Quote Message\nreturn [{ json: $input.first().json }];\n"
+      },
+      "id": "node-validate-approval-token",
+      "name": "Validate Approval Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        600
+      ],
+      "notes": "Security gate: validates APPROVAL_SECRET_TOKEN before allowing customer quote to be sent. Accepts token via HTTP header 'x-approval-token' OR body field 'approvalToken'. Throws error (halts execution) if token is missing, empty, or does not match $env.APPROVAL_SECRET_TOKEN. NEVER commit a real token value — set APPROVAL_SECRET_TOKEN in n8n Settings → Variables."
     }
   ],
   "connections": {
     "Webhook - Quote Request": {
       "main": [
-        [{ "node": "Normalize & Calculate CBM", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Normalize & Calculate CBM",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Normalize & Calculate CBM": {
       "main": [
-        [{ "node": "Get Rate Table", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Get Rate Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Get Rate Table": {
       "main": [
-        [{ "node": "Calculate Price", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Calculate Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Calculate Price": {
       "main": [
-        [{ "node": "Log to Quote Sheet", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Log to Quote Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Log to Quote Sheet": {
       "main": [
-        [{ "node": "Build Approval Notification", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Build Approval Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Approval Notification": {
       "main": [
         [
-          { "node": "LINE Notify - Human Approval", "type": "main", "index": 0 },
-          { "node": "Email - Human Approval Backup", "type": "main", "index": 0 }
+          {
+            "node": "LINE Notify - Human Approval",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email - Human Approval Backup",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Webhook - Quote Approved": {
       "main": [
-        [{ "node": "Build Customer Quote Message", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Validate Approval Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Customer Quote Message": {
       "main": [
-        [{ "node": "Send Quote to Customer (LINE)", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Send Quote to Customer (LINE)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Send Quote to Customer (LINE)": {
       "main": [
-        [{ "node": "Update Sheet - Approved & Sent", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Update Sheet - Approved & Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Daily Follow-up Trigger": {
       "main": [
-        [{ "node": "Get Pending Follow-ups", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Get Pending Follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Get Pending Follow-ups": {
       "main": [
-        [{ "node": "Filter Due Follow-ups", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Filter Due Follow-ups",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Filter Due Follow-ups": {
       "main": [
-        [{ "node": "Follow-up Reminder Notify", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Follow-up Reminder Notify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Approval Token": {
+      "main": [
+        [
+          {
+            "node": "Build Customer Quote Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -401,17 +549,22 @@
     "executionOrder": "v1"
   },
   "meta": {
-    "description": "Freight Forwarding Quotation Automation. Receives quote requests, calculates prices from Rate Table, logs to Google Sheets, notifies team for HUMAN APPROVAL, then sends approved quote to customer via LINE. Includes daily follow-up reminders.",
-    "version": "1.0.0",
+    "description": "Freight Forwarding Quotation Automation — PILOT V1 (Draft-Only Supervised Mode). Receives quote requests, calculates prices from Rate Table using USD_THB from $env.USD_THB, logs DRAFT quotes to Google Sheets, notifies team for HUMAN APPROVAL via LINE + Email. No customer-facing message is sent automatically. Land shipments and unknown routes always set requiresManualQuote=true.",
+    "version": "1.1.0-pilot",
     "setupInstructions": [
-      "1. Replace YOUR_GOOGLE_SHEET_ID with your Google Sheets ID",
-      "2. Replace YOUR_LINE_NOTIFY_TOKEN with your LINE Notify token (notify-bot.line.me/my)",
-      "3. Configure Google Sheets credentials (Service Account or OAuth2)",
-      "4. Configure Gmail credentials for backup email notifications",
-      "5. Configure LINE Messaging API credentials for sending to customers",
-      "6. Update manager email in Email node",
-      "7. Activate workflow",
-      "8. Set up Google Form to POST to the Webhook URL via Apps Script"
-    ]
+      "1. Set GOOGLE_SHEET_ID in n8n environment variables (Settings → Variables)",
+      "2. Set USD_THB in n8n environment variables — current exchange rate, e.g. 35.50 (REQUIRED)",
+      "3. Set QUOTE_VALIDITY_DAYS in n8n environment variables, e.g. 30",
+      "4. Set SALES_EMAIL in n8n environment variables (sender email)",
+      "5. Set MANAGER_EMAIL in n8n environment variables (approval recipient)",
+      "6. Set LINE_NOTIFY_TOKEN in n8n environment variables (from notify-bot.line.me/my)",
+      "7. Configure Google Sheets credentials (Service Account or OAuth2) in n8n Credentials",
+      "8. Configure Gmail credentials in n8n Credentials",
+      "9. Configure LINE Notify credentials in n8n Credentials",
+      "10. Configure LINE Messaging API credentials in n8n Credentials (for post-approval send to customer)",
+      "11. Fill RateTable in Google Sheets with verified live rates before activating",
+      "12. Activate workflow — all generated quotes are DRAFT status until human approval webhook is called"
+    ],
+    "pilotMode": "draft-only-supervised"
   }
 }
