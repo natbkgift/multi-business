@@ -4,6 +4,36 @@
 
 ---
 
+## ⚠️ สถานะปัจจุบัน — BLUEPRINT / TEMPLATE GRADE (ไม่พร้อม Production)
+
+> **อ่านก่อนใช้งาน — สำคัญมาก**
+
+| รายการ | สถานะ |
+|--------|-------|
+| 📋 ไฟล์ทั้งหมด | Blueprint / Template เท่านั้น |
+| 🚫 Production-Ready | **ยังไม่พร้อม** |
+| ✅ JSON Validation | ผ่านทุกไฟล์ (5/5 valid) |
+| ✅ Human Approval Gates | ออกแบบถูกต้องทุก workflow |
+
+### สิ่งที่ต้องทำก่อน activate ทุก workflow:
+
+1. **🔑 Credentials** — ต้องกรอก placeholder ทั้ง 23 รายการ (`YOUR_*`, `[PLACEHOLDER]`) ในทุกไฟล์ JSON ก่อน workflow จะทำงานได้
+2. **📊 Rate Verification** — ตาราง `freight/rate-table.csv` ใช้ข้อมูลตัวอย่าง (Last Updated: 2024-01-01) และอัตราแลกเปลี่ยน USD/THB แบบ hardcode (`* 36`) ต้องอัปเดตด้วยข้อมูลจริงก่อนออก quotation จริง
+3. **🔌 API Compatibility** — LINE Notify มีความเสี่ยงถูกปิดให้บริการ, `real-estate/make-scenario.json` ไม่ตรงกับ Make.com blueprint schema (ต้อง rebuild ใน GUI), `sauna/line-chatbot-flow.json` ไม่สามารถ import เข้า LINE OA ได้โดยตรง
+4. **🧪 Supervised Pilot** — ต้องทดสอบแบบ supervised ด้วยข้อมูลจริงก่อน go-live ทุกระบบ
+
+### Blockers วิกฤต (Critical — ทำให้ระบบล้มเหลวทันที):
+- `[APPROVAL_LINK]` ใน sauna workflow ยังเป็น placeholder — ลิงก์อนุมัติการจองใช้งานไม่ได้
+- อัตรา land freight hardcode ที่ `15 THB/kg` — ไม่มีในตาราง rate
+- สูตร `leadScore` ใน Make.com scenario มี bug (ใช้ `+8` source score แบบ unconditional)
+- Coupon uniqueness check ที่ระบุใน `coupon-generator.md` ยังไม่ได้ implement ใน n8n
+
+### ลำดับการ Fix:
+> 🔧 **Freight Pilot Fix V1** ต้องทำใน **PR แยกต่างหาก (follow-up PR)**
+> PR นี้ถือเป็น baseline blueprint เท่านั้น — ห้าม merge เป็น production branch โดยไม่ผ่าน pilot fixes
+
+---
+
 ## ภาพรวมโครงการ
 
 ระบบนี้ออกแบบมาเพื่อให้ทีมขนาดเล็กสามารถบริหารธุรกิจ 5 สาขาได้อย่างมีประสิทธิภาพ โดยใช้ระบบอัตโนมัติที่มี ROI สูงสุดก่อน เน้นการสร้างรายได้และลดเวลาซ้ำซ้อน ทุก workflow มีจุด **Human Approval** ก่อนการส่งข้อมูลออกสู่ภายนอก
