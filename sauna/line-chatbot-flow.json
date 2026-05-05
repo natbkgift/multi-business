@@ -1,0 +1,166 @@
+{
+  "name": "Harmony Sauna LINE OA Chatbot Flow",
+  "version": "1.0.0",
+  "description": "LINE OA chatbot flow for Harmony Sauna. Handles bookings, package inquiries, and escalates to human staff when needed.",
+  "richMenu": {
+    "size": { "width": 2500, "height": 843 },
+    "selected": true,
+    "name": "Sauna Main Menu",
+    "chatBarText": "เมนูบริการ 🧖",
+    "areas": [
+      {
+        "bounds": { "x": 0, "y": 0, "width": 833, "height": 843 },
+        "action": { "type": "postback", "data": "action=book", "displayText": "จองบริการ 📅" }
+      },
+      {
+        "bounds": { "x": 833, "y": 0, "width": 834, "height": 843 },
+        "action": { "type": "postback", "data": "action=packages", "displayText": "ดูแพ็คเกจ 💆" }
+      },
+      {
+        "bounds": { "x": 1667, "y": 0, "width": 833, "height": 843 },
+        "action": { "type": "postback", "data": "action=contact", "displayText": "ติดต่อเจ้าหน้าที่ 👩‍💼" }
+      }
+    ]
+  },
+  "intentHandlers": [
+    {
+      "intent": "book",
+      "trigger": { "type": "postback", "data": "action=book" },
+      "response": {
+        "type": "flex",
+        "altText": "เลือกแพ็คเกจที่ต้องการจอง",
+        "contents": {
+          "type": "bubble",
+          "header": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [{ "type": "text", "text": "🧖 เลือกแพ็คเกจ", "weight": "bold", "size": "lg" }]
+          },
+          "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+              { "type": "button", "action": { "type": "postback", "data": "package=basic", "displayText": "Basic Relax - 499฿" }, "style": "primary", "margin": "sm" },
+              { "type": "button", "action": { "type": "postback", "data": "package=premium", "displayText": "Premium - 899฿" }, "style": "primary", "margin": "sm" },
+              { "type": "button", "action": { "type": "postback", "data": "package=couple", "displayText": "Couple Spa - 1,499฿" }, "style": "primary", "margin": "sm" },
+              { "type": "button", "action": { "type": "postback", "data": "package=monthly", "displayText": "Monthly Pass - 2,499฿" }, "style": "secondary", "margin": "sm" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "intent": "packages",
+      "trigger": { "type": "postback", "data": "action=packages" },
+      "response": {
+        "type": "flex",
+        "altText": "แพ็คเกจ Harmony Sauna",
+        "contents": {
+          "type": "carousel",
+          "contents": [
+            {
+              "type": "bubble",
+              "header": { "type": "box", "layout": "vertical", "backgroundColor": "#667eea",
+                "contents": [{ "type": "text", "text": "🌿 Basic Relax", "color": "#ffffff", "weight": "bold", "size": "lg" }] },
+              "body": { "type": "box", "layout": "vertical", "contents": [
+                { "type": "text", "text": "45 นาที", "color": "#666666" },
+                { "type": "text", "text": "✓ สวน\n✓ ฝักบัว\n✓ ผ้าเช็ดตัว", "wrap": true, "margin": "md" },
+                { "type": "text", "text": "499 ฿", "weight": "bold", "size": "xl", "color": "#667eea", "margin": "lg" }
+              ] },
+              "footer": { "type": "box", "layout": "vertical", "contents": [
+                { "type": "button", "action": { "type": "postback", "data": "package=basic", "displayText": "จอง Basic Relax" }, "style": "primary" }
+              ] }
+            },
+            {
+              "type": "bubble",
+              "header": { "type": "box", "layout": "vertical", "backgroundColor": "#764ba2",
+                "contents": [{ "type": "text", "text": "⭐ Premium", "color": "#ffffff", "weight": "bold", "size": "lg" }] },
+              "body": { "type": "box", "layout": "vertical", "contents": [
+                { "type": "text", "text": "90 นาที", "color": "#666666" },
+                { "type": "text", "text": "✓ สวน\n✓ ฝักบัว\n✓ น้ำผลไม้\n✓ ขนม", "wrap": true, "margin": "md" },
+                { "type": "text", "text": "899 ฿", "weight": "bold", "size": "xl", "color": "#764ba2", "margin": "lg" }
+              ] },
+              "footer": { "type": "box", "layout": "vertical", "contents": [
+                { "type": "button", "action": { "type": "postback", "data": "package=premium", "displayText": "จอง Premium" }, "style": "primary", "color": "#764ba2" }
+              ] }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "intent": "package_selected",
+      "trigger": { "type": "postback", "dataPrefix": "package=" },
+      "response": {
+        "type": "text",
+        "text": "✅ คุณเลือก {{packageName}} ({{packagePrice}} ฿)\n\nกรุณาแจ้งวันและเวลาที่ต้องการ:\nตัวอย่าง: วันเสาร์ที่ 20 มกราคม เวลา 14:00 น.\n\nเวลาให้บริการ: 10:00 - 20:00 น. ทุกวัน"
+      },
+      "nextStep": "collect_datetime"
+    },
+    {
+      "intent": "collect_datetime",
+      "trigger": { "type": "message", "contextState": "awaiting_datetime" },
+      "action": "extract_datetime_and_create_booking_request",
+      "response": {
+        "type": "text",
+        "text": "📋 สรุปการจอง:\n{{packageName}} | {{requestedDate}} {{requestedTime}}\nราคา: {{packagePrice}} ฿\n\nกำลังตรวจสอบ slot ว่าง กรุณารอสักครู่... ⏳"
+      },
+      "backendAction": "POST_TO_N8N_WEBHOOK",
+      "notes": "Sends booking request to n8n for staff approval. n8n webhook URL configured separately."
+    },
+    {
+      "intent": "contact_human",
+      "trigger": [
+        { "type": "postback", "data": "action=contact" },
+        { "type": "fallback", "confidence_threshold": 0.6 }
+      ],
+      "response": {
+        "type": "text",
+        "text": "👩‍💼 กำลังเชื่อมต่อกับเจ้าหน้าที่...\n\nเวลาทำการ: 09:00 - 21:00 น.\nโทร: [เบอร์โทร]\n\nหรือฝากข้อความไว้ เจ้าหน้าที่จะติดต่อกลับเร็วๆ นี้ 🙏"
+      },
+      "backendAction": "NOTIFY_STAFF_VIA_LINE_NOTIFY",
+      "notes": "Fallback to human when confidence < 60% or user requests contact."
+    },
+    {
+      "intent": "booking_confirmed",
+      "trigger": { "type": "system", "event": "staff_approved" },
+      "response": {
+        "type": "flex",
+        "altText": "การจองของคุณได้รับการยืนยัน",
+        "contents": {
+          "type": "bubble",
+          "header": { "type": "box", "layout": "vertical", "backgroundColor": "#27AE60",
+            "contents": [{ "type": "text", "text": "✅ ยืนยันการจองแล้ว!", "color": "#ffffff", "weight": "bold" }] },
+          "body": { "type": "box", "layout": "vertical", "contents": [
+            { "type": "text", "text": "📋 {{packageName}}", "weight": "bold" },
+            { "type": "text", "text": "📅 {{bookingDate}} {{bookingTime}}", "margin": "sm" },
+            { "type": "text", "text": "💰 {{packagePrice}} ฿", "margin": "sm" },
+            { "type": "separator", "margin": "md" },
+            { "type": "text", "text": "🎟️ Coupon Code:", "margin": "md", "weight": "bold" },
+            { "type": "text", "text": "{{couponCode}}", "size": "xl", "color": "#27AE60", "weight": "bold", "margin": "sm" },
+            { "type": "text", "text": "กรุณาแสดง code นี้เมื่อมาถึง", "size": "sm", "color": "#999999", "wrap": true }
+          ] },
+          "footer": { "type": "box", "layout": "vertical", "contents": [
+            { "type": "text", "text": "📍 [ที่อยู่ร้าน]\n📞 [เบอร์โทร]", "wrap": true, "size": "sm", "color": "#666666" }
+          ] }
+        }
+      }
+    },
+    {
+      "intent": "booking_reminder",
+      "trigger": { "type": "scheduled", "timing": "24_hours_before_booking" },
+      "response": {
+        "type": "text",
+        "text": "⏰ แจ้งเตือน: พรุ่งนี้มีนัดกับ Harmony Sauna!\n\n🧖 {{packageName}}\n📅 {{bookingDate}} เวลา {{bookingTime}} น.\n🎟️ Coupon: {{couponCode}}\n\nหากต้องการเลื่อนนัด กรุณาแจ้งล่วงหน้า 3 ชั่วโมง\nโทร: [เบอร์โทร] 🙏"
+      }
+    }
+  ],
+  "setupInstructions": [
+    "1. สร้าง LINE OA ที่ manager.line.biz",
+    "2. Enable Messaging API และบันทึก Channel Access Token",
+    "3. สร้าง Rich Menu ตาม richMenu config ด้านบน",
+    "4. ตั้ง Webhook URL ให้ชี้ไปที่ n8n-workflow webhook endpoint",
+    "5. Import n8n-workflow.json เข้า n8n สำหรับ backend logic",
+    "6. อัปเดต package names, prices, และ contact info ในข้อความ"
+  ]
+}

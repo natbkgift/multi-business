@@ -1,0 +1,182 @@
+{
+  "name": "AI Content Pipeline - YouTube/Shorts",
+  "description": "Weekly AI-assisted content pipeline. Runs every Monday to research trends and create script drafts using OpenAI. Requires HUMAN APPROVAL at two stages: script review and pre-publish.",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "weeks", "weeksInterval": 1, "triggerAtDay": [1], "triggerAtHour": 8 }]
+        }
+      },
+      "id": "node-weekly-trigger",
+      "name": "Weekly Content Trigger (Mon 08:00)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Runs every Monday at 08:00 to kick off the weekly content research cycle."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Define content topics and niches to research\n// Customize these topics for your business\nconst topics = [\n  { niche: 'freight', keywords: ['freight forwarding thailand', 'นำเข้าส่งออก', 'logistics startup'], platform: 'YouTube Shorts' },\n  { niche: 'real_estate', keywords: ['อสังหาริมทรัพย์ 2024', 'condo investment thailand', 'ซื้อบ้านฉลาด'], platform: 'YouTube' },\n  { niche: 'sauna', keywords: ['sauna health benefits', 'สวนสุขภาพ', 'wellness thailand'], platform: 'TikTok' },\n  { niche: 'business', keywords: ['ธุรกิจขนาดเล็ก automation', 'AI business tools', 'make money online thailand'], platform: 'YouTube Shorts' }\n];\n\nconst week = Math.ceil((new Date() - new Date(new Date().getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000));\n\nreturn topics.map(t => ({\n  json: {\n    ...t,\n    researchWeek: week,\n    researchDate: new Date().toISOString().slice(0, 10)\n  }\n}));\n"
+      },
+      "id": "node-define-topics",
+      "name": "Define Weekly Research Topics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "notes": "Define your content niches and keywords here. Customize for your business."
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "คุณเป็น Content Strategist ผู้เชี่ยวชาญ YouTube Shorts และ TikTok สำหรับตลาดไทย เชี่ยวชาญด้านธุรกิจ logistics, อสังหาฯ, และ wellness. สร้าง content ideas ที่ดึงดูด มี hook ที่แข็งแกร่ง และ value ที่ชัดเจน"
+            },
+            {
+              "role": "user",
+              "content": "=สร้าง content idea สำหรับ {{ $json.platform }} เกี่ยวกับ {{ $json.niche }}\nKeywords ที่ target: {{ $json.keywords.join(', ') }}\n\nกรุณาสร้าง:\n1. ชื่อหัวข้อ/Title ที่ดึงดูด (5-8 ตัวเลือก)\n2. Hook สำหรับ 3 วินาทีแรก\n3. Script outline (สั้นๆ 5-7 points)\n4. CTA ที่เหมาะสม\n5. Hashtags 10 อัน\n\nFormat: JSON\n{ \"titles\": [], \"hook\": \"\", \"outline\": [], \"cta\": \"\", \"hashtags\": [] }"
+            }
+          ]
+        },
+        "options": { "temperature": 0.8, "maxTokens": 1000 }
+      },
+      "id": "node-gpt-research",
+      "name": "GPT-4 Content Research",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "openAiApi": { "id": "YOUR_OPENAI_CREDENTIAL_ID", "name": "OpenAI" }
+      },
+      "notes": "Uses GPT-4o to research and generate content ideas. Configure OpenAI credentials."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse GPT response and prepare for Google Sheets\nconst topic = $('Define Weekly Research Topics').first().json;\nconst gptResponse = $input.first().json.message?.content || $input.first().json.choices?.[0]?.message?.content || '';\n\nlet parsed = {};\ntry {\n  const jsonMatch = gptResponse.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);\n} catch (e) {\n  parsed = { titles: [gptResponse.slice(0, 100)], hook: '', outline: [], cta: '', hashtags: [] };\n}\n\nconst now = new Date();\nconst contentId = `CONT-${now.getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;\n\nconst publishDate = new Date();\npublishDate.setDate(publishDate.getDate() + (topic.platform === 'YouTube' ? 10 : 5));\n\nreturn [{\n  json: {\n    contentId,\n    week: `W${topic.researchWeek}`,\n    publishDate: publishDate.toISOString().slice(0, 10),\n    platform: topic.platform,\n    niche: topic.niche,\n    suggestedTitle: (parsed.titles || [])[0] || 'TBD',\n    allTitles: (parsed.titles || []).join(' | '),\n    hook: parsed.hook || '',\n    outline: (parsed.outline || []).join('\\n'),\n    cta: parsed.cta || '',\n    hashtags: (parsed.hashtags || []).join(' '),\n    scriptStatus: 'Draft',\n    productionStatus: 'Not Started',\n    researchDate: topic.researchDate\n  }\n}];\n"
+      },
+      "id": "node-parse-gpt",
+      "name": "Parse GPT Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_CONTENT_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Content Calendar", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Content ID": "={{ $json.contentId }}",
+            "Week": "={{ $json.week }}",
+            "Publish Date": "={{ $json.publishDate }}",
+            "Platform": "={{ $json.platform }}",
+            "Topic": "={{ $json.suggestedTitle }}",
+            "Keywords": "={{ $json.hashtags }}",
+            "Script Status": "Draft",
+            "Production Status": "Not Started",
+            "Notes": "=Hook: {{ $json.hook }} | Outline: {{ $json.outline }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-add-to-calendar",
+      "name": "Add to Content Calendar",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1120, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "YOUR_CREDENTIAL_ID", "name": "Google Sheets" }
+      }
+    },
+    {
+      "parameters": {
+        "token": "YOUR_LINE_NOTIFY_TOKEN",
+        "message": "=🎬 [CONTENT IDEAS READY - APPROVAL NEEDED]\n\n📋 Content ID: {{ $json.contentId }}\n📱 Platform: {{ $json.platform }}\n📝 Suggested Title: {{ $json.suggestedTitle }}\n\n⚠️ กรุณาตรวจสอบ Script Draft ใน Google Sheets\n👉 {{ 'https://docs.google.com/spreadsheets/d/YOUR_CONTENT_SHEET_ID' }}\n\nเปลี่ยน Script Status เป็น 'Script Approved' เพื่อดำเนินการต่อ"
+      },
+      "id": "node-content-notify",
+      "name": "Notify Team - Script Review Needed",
+      "type": "n8n-nodes-base.lineNotify",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "credentials": {
+        "lineNotifyOAuth2Api": { "id": "YOUR_LINE_NOTIFY_CREDENTIAL_ID", "name": "LINE Notify" }
+      },
+      "notes": "HUMAN APPROVAL GATE 1 — Team must review and approve script before production starts."
+    },
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 12 }] }
+      },
+      "id": "node-publish-check-trigger",
+      "name": "Check Ready to Publish (Every 12h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 600]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_CONTENT_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Content Calendar", "mode": "name" },
+        "options": {}
+      },
+      "id": "node-get-ready-content",
+      "name": "Get Content Calendar",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [460, 600],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "YOUR_CREDENTIAL_ID", "name": "Google Sheets" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Find content ready for final approval (production done, not yet published)\nconst today = new Date().toISOString().slice(0, 10);\nconst rows = $input.all().map(r => r.json);\n\nconst readyItems = rows.filter(row => {\n  const productionStatus = (row['Production Status'] || '').toString();\n  const publishedLink = (row['Published Link'] || '').toString();\n  const publishDate = (row['Publish Date'] || '').toString().slice(0, 10);\n  return productionStatus === 'Ready for Review'\n    && !publishedLink\n    && publishDate <= today;\n});\n\nreturn readyItems.map(r => ({ json: r }));\n"
+      },
+      "id": "node-filter-ready",
+      "name": "Filter Ready to Publish",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "token": "YOUR_LINE_NOTIFY_TOKEN",
+        "message": "=🚀 [CONTENT READY TO PUBLISH - FINAL APPROVAL]\n\n📋 {{ $json['Content ID'] }}\n📱 {{ $json['Platform'] }}\n📝 Topic: {{ $json['Topic'] }}\n📅 Publish Date: {{ $json['Publish Date'] }}\n🎬 Video: {{ $json['Video Link (Draft)'] }}\n\n⚠️ กรุณาตรวจสอบและ Approve ก่อน Publish\n👉 Sheets: https://docs.google.com/spreadsheets/d/YOUR_CONTENT_SHEET_ID\nเปลี่ยน Final Approval By และ Published Link เมื่อ Publish แล้ว"
+      },
+      "id": "node-final-approval-notify",
+      "name": "Notify - Final Publish Approval",
+      "type": "n8n-nodes-base.lineNotify",
+      "typeVersion": 1,
+      "position": [900, 600],
+      "credentials": {
+        "lineNotifyOAuth2Api": { "id": "YOUR_LINE_NOTIFY_CREDENTIAL_ID", "name": "LINE Notify" }
+      },
+      "notes": "HUMAN APPROVAL GATE 2 — Final review before publishing. No auto-publishing."
+    }
+  ],
+  "connections": {
+    "Weekly Content Trigger (Mon 08:00)": { "main": [[{ "node": "Define Weekly Research Topics", "type": "main", "index": 0 }]] },
+    "Define Weekly Research Topics": { "main": [[{ "node": "GPT-4 Content Research", "type": "main", "index": 0 }]] },
+    "GPT-4 Content Research": { "main": [[{ "node": "Parse GPT Response", "type": "main", "index": 0 }]] },
+    "Parse GPT Response": { "main": [[{ "node": "Add to Content Calendar", "type": "main", "index": 0 }]] },
+    "Add to Content Calendar": { "main": [[{ "node": "Notify Team - Script Review Needed", "type": "main", "index": 0 }]] },
+    "Check Ready to Publish (Every 12h)": { "main": [[{ "node": "Get Content Calendar", "type": "main", "index": 0 }]] },
+    "Get Content Calendar": { "main": [[{ "node": "Filter Ready to Publish", "type": "main", "index": 0 }]] },
+    "Filter Ready to Publish": { "main": [[{ "node": "Notify - Final Publish Approval", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "setupInstructions": [
+      "1. Replace YOUR_CONTENT_SHEET_ID with your Content Calendar Google Sheets ID",
+      "2. Replace YOUR_LINE_NOTIFY_TOKEN with your LINE Notify token",
+      "3. Configure OpenAI credentials in n8n",
+      "4. Configure Google Sheets credentials",
+      "5. Customize topic niches and keywords in 'Define Weekly Research Topics' node",
+      "6. Activate both workflows"
+    ]
+  }
+}

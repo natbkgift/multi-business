@@ -1,0 +1,126 @@
+{
+  "name": "Real Estate Lead Generation - Full Automation",
+  "description": "Receives leads from Facebook Lead Ads and LINE OA, sends auto-reply, logs to HubSpot CRM and Google Sheets, calculates lead score, then requires HUMAN APPROVAL before assigning to agent.",
+  "version": "1.0.0",
+  "modules": [
+    {
+      "id": 1,
+      "module": "facebook-lead-ads:TriggerNewLead",
+      "version": 1,
+      "parameters": {
+        "pageId": "YOUR_FACEBOOK_PAGE_ID",
+        "formId": "YOUR_FACEBOOK_LEAD_FORM_ID"
+      },
+      "notes": "Replace YOUR_FACEBOOK_PAGE_ID and YOUR_FACEBOOK_LEAD_FORM_ID. Connect Facebook account in Make.com connections."
+    },
+    {
+      "id": 2,
+      "module": "builtin:BasicFeeder",
+      "version": 1,
+      "parameters": {
+        "array": "={{[1.answers]}}",
+        "transformer": {
+          "customerName": "={{1.answers[field_name='full_name'].values[0] ?? 1.answers[field_name='name'].values[0] ?? 'Unknown'}}",
+          "phone": "={{1.answers[field_name='phone_number'].values[0] ?? ''}}",
+          "email": "={{1.answers[field_name='email'].values[0] ?? ''}}",
+          "budget": "={{1.answers[field_name='budget'].values[0] ?? '0'}}",
+          "location": "={{1.answers[field_name='location'].values[0] ?? ''}}",
+          "propertyType": "={{1.answers[field_name='property_type'].values[0] ?? ''}}",
+          "timeline": "={{1.answers[field_name='timeline'].values[0] ?? 'Just Looking'}}",
+          "leadSource": "Facebook Lead Ad",
+          "facebookLeadId": "={{1.id}}",
+          "leadId": "=RE-{{formatDate(now; 'YYYYMMDD')}}-{{round(random() * 9000 + 1000)}}"
+        }
+      },
+      "notes": "Normalizes Facebook lead form fields. Adjust field_name keys to match your actual form field names."
+    },
+    {
+      "id": 3,
+      "module": "facebook-messenger:SendMessage",
+      "version": 1,
+      "parameters": {
+        "recipientId": "={{1.leadgen_data.fb_id ?? ''}}",
+        "messageType": "text",
+        "message": "สวัสดีครับ คุณ{{2.customerName}} 🏠\n\nขอบคุณที่สนใจอสังหาริมทรัพย์กับเรา!\nทีมงานจะติดต่อกลับภายใน 5 นาทีครับ\n\nระหว่างรอ สามารถดูโครงการของเราได้ที่:\n👉 [LINK_TO_PROJECTS]\n\nหรือ LINE: @[LINE_OA_ID]"
+      },
+      "notes": "Auto-reply to Facebook Messenger immediately. Update message template and links."
+    },
+    {
+      "id": 4,
+      "module": "google-sheets:AddRow",
+      "version": 1,
+      "parameters": {
+        "spreadsheetId": "YOUR_GOOGLE_SHEET_ID",
+        "sheetId": "Leads",
+        "values": {
+          "Lead ID": "={{2.leadId}}",
+          "Date": "={{formatDate(now; 'YYYY-MM-DD HH:mm:ss')}}",
+          "Customer Name": "={{2.customerName}}",
+          "Phone": "={{2.phone}}",
+          "Facebook Lead ID": "={{2.facebookLeadId}}",
+          "Lead Source": "={{2.leadSource}}",
+          "Property Type": "={{2.propertyType}}",
+          "Preferred Location": "={{2.location}}",
+          "Purchase Timeline": "={{2.timeline}}",
+          "Stage": "New Lead"
+        }
+      },
+      "notes": "Logs new lead to Google Sheets. Replace YOUR_GOOGLE_SHEET_ID."
+    },
+    {
+      "id": 5,
+      "module": "hubspot-crm:CreateContact",
+      "version": 1,
+      "parameters": {
+        "properties": {
+          "firstname": "={{2.customerName.split(' ')[0]}}",
+          "lastname": "={{2.customerName.split(' ').slice(1).join(' ')}}",
+          "phone": "={{2.phone}}",
+          "email": "={{2.email}}",
+          "lead_source_detail": "={{2.leadSource}}",
+          "property_type": "={{2.propertyType}}",
+          "preferred_location": "={{2.location}}",
+          "purchase_timeline": "={{2.timeline}}",
+          "facebook_lead_id": "={{2.facebookLeadId}}"
+        }
+      },
+      "notes": "Creates contact in HubSpot CRM. Connect HubSpot in Make.com connections using Private App token."
+    },
+    {
+      "id": 6,
+      "module": "builtin:BasicFeeder",
+      "version": 1,
+      "parameters": {
+        "transformer": {
+          "budgetNum": "={{toNumber(2.budget) ?? 0}}",
+          "budgetScore": "={{toNumber(2.budget) > 10000000 ? 30 : toNumber(2.budget) > 5000000 ? 25 : toNumber(2.budget) > 3000000 ? 20 : toNumber(2.budget) > 1500000 ? 15 : toNumber(2.budget) > 800000 ? 10 : toNumber(2.budget) > 500000 ? 5 : 0}}",
+          "timelineScore": "={{2.timeline == 'Within 1 Month' ? 30 : 2.timeline == '1-3 Months' ? 25 : 2.timeline == '3-6 Months' ? 15 : 2.timeline == '6-12 Months' ? 10 : 0}}",
+          "sourceScore": "={{2.leadSource == 'Referral' ? 15 : 2.leadSource == 'LINE OA' ? 12 : 2.leadSource == 'Website Form' ? 10 : 8}}",
+          "engagementScore": "={{(2.location ? 5 : 0) + (2.propertyType ? 3 : 0)}}",
+          "leadScore": "={{min(100, (toNumber(2.budget) > 10000000 ? 30 : toNumber(2.budget) > 5000000 ? 25 : toNumber(2.budget) > 3000000 ? 20 : toNumber(2.budget) > 1500000 ? 15 : toNumber(2.budget) > 800000 ? 10 : 5) + (2.timeline == 'Within 1 Month' ? 30 : 2.timeline == '1-3 Months' ? 25 : 2.timeline == '3-6 Months' ? 15 : 10) + 8)}}",
+          "leadTemperature": "={{toNumber(leadScore) >= 80 ? '🔥 Hot' : toNumber(leadScore) >= 60 ? '🌡️ Warm' : toNumber(leadScore) >= 40 ? '❄️ Cool' : '🧊 Cold'}}"
+        }
+      },
+      "notes": "Calculates lead score based on budget, timeline, source, and engagement."
+    },
+    {
+      "id": 7,
+      "module": "line-notify:SendNotification",
+      "version": 1,
+      "parameters": {
+        "token": "YOUR_LINE_NOTIFY_TOKEN",
+        "message": "🏠 [NEW REAL ESTATE LEAD - APPROVAL REQUIRED]\n\n👤 ชื่อ: {{2.customerName}}\n📞 เบอร์: {{2.phone}}\n💰 งบ: {{2.budget}} THB\n🏡 ทำเล: {{2.location}}\n📋 ประเภท: {{2.propertyType}}\n⏰ Timeline: {{2.timeline}}\n🎯 Lead Score: {{6.leadScore}} - {{6.leadTemperature}}\n🔗 Source: {{2.leadSource}}\n\n━━━━━━━━━━━━━━\n⚠️ กรุณาอนุมัติการ Assign ก่อน\n👉 เปิด Sheets เพื่อ Assign agent:\nhttps://docs.google.com/spreadsheets/d/YOUR_GOOGLE_SHEET_ID\nLead ID: {{2.leadId}}"
+      },
+      "notes": "HUMAN APPROVAL GATE - notifies manager via LINE Notify. Replace YOUR_LINE_NOTIFY_TOKEN."
+    }
+  ],
+  "setupInstructions": [
+    "1. Replace YOUR_FACEBOOK_PAGE_ID with your Facebook Page ID",
+    "2. Replace YOUR_FACEBOOK_LEAD_FORM_ID with your Lead Form ID",
+    "3. Replace YOUR_GOOGLE_SHEET_ID with your Google Sheets ID",
+    "4. Replace YOUR_LINE_NOTIFY_TOKEN with your LINE Notify token",
+    "5. Update Facebook Messenger auto-reply template with your links",
+    "6. Connect all services in Make.com Connections",
+    "7. Activate the scenario"
+  ]
+}
